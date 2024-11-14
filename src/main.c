@@ -29,14 +29,34 @@ V2 -> [6][4]
  */
 
 
-
 enum{ MEM_SIZE = 1 << 15 };
 uint8_t backing_mem[MEM_SIZE];
 
 int main(void) {
 	struct Circuit circuit = circuit_make(backing_mem, sizeof backing_mem);
 	
+	circuit_add_component(&circuit, 0, 1, DEVICE_VOLTAGE_SRC, rat_from_int(5)); // V1 between node 0 and 1
+	circuit_add_component(&circuit, 1, 2, DEVICE_RESISTOR, rat_from_int(1000)); // R1 between node 1 and 2
+	circuit_add_component(&circuit, 2, 0, DEVICE_RESISTOR, rat_from_int(1000)); // R2 between node 2 and 0
+	
+	circuit_calc_voltages(&circuit);
+	for( size_t i=0; i < MAX_NODES; i++ ) {
+		if( circuit.active_nodes & (1 << i) ) {
+			char buffer[32] = {0};
+			rat_to_str(circuit.voltage[i], sizeof buffer, buffer);
+			printf("Voltage at node %zu: %s V\n", i, buffer);
+		}
+	}
+	
+#	ifdef __CE__
 	os_ClrHome();                    /** Clear the homescreen */
-	os_PutStrFull("Hello World");    /** Print a string */
-	while( !os_GetCSC() );           /** Waits for a key */
+	os_PutStrFull("Hello World");    /** Print a string  */
+	for(;;) {
+		if( os_GetCSC()==sk_Clear ) {
+			break;
+		}
+	}
+#	else
+	printf("Hello World");
+#	endif
 }

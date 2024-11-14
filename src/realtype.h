@@ -136,6 +136,14 @@ RATIONAL_EXPORT int rat_eq(rat_t const a, rat_t const b, rat_t const eps) {
 	return rat_abs(rat_sub(a, b)) < eps;
 }
 
+RATIONAL_EXPORT int rat_to_str(rat_t const a, size_t const len, char buffer[const static len]) {
+	return os_RealToStr(buffer, &a, len, 4, -1) > 0;
+}
+
+RATIONAL_EXPORT rat_t str_to_rat(char const cstr[const static 1]) {
+	char *end = NULL;
+	return StrToReal(cstr, &end);
+}
 #	else
 #include <math.h>
 typedef double rat_t;
@@ -266,6 +274,13 @@ RATIONAL_EXPORT rat_t rat_root(rat_t const a, rat_t const b) {
 	}
 	return pow(a, 1/b);
 }
-#	endif
 
+RATIONAL_EXPORT int rat_to_str(rat_t const a, size_t const len, char buffer[const static len]) {
+	return snprintf(buffer, len, "%f", a);
+}
+
+RATIONAL_EXPORT rat_t str_to_rat(char const cstr[const static 1]) {
+	return strtod(cstr, NULL);
+}
+#	endif
 #endif

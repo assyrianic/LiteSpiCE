@@ -26,7 +26,6 @@ enum {
 
 enum {
 	MAX_NODES    = 20,
-	MATRIX_SIZE  = MAX_NODES * (MAX_NODES + 1),
 	GROUND_INDEX =  0,
 };
 
@@ -40,9 +39,9 @@ CIRCUIT_EXPORT size_t pop_count(size_t const x) {
 
 /// for solving the conductance matrix.
 /// credit to Andrew via https://blamsoft.com/gaussian-elimination-c-code/
-CIRCUIT_EXPORT void gaussian(size_t const n, rat_t *restrict *restrict A, rat_t v[const restrict]) {
+CIRCUIT_EXPORT void gaussian(size_t const n, rat_t **const restrict A, rat_t v[const restrict]) {
 	for( size_t k = 0; k < n-1; k++ ) {
-		// Partial pivot
+		/// Partial pivot
 		rat_t cur_max = rat_abs(A[k][k]);
 		size_t m = k;
 		for( size_t i = k+1; i < n; i++ ) {
@@ -62,7 +61,7 @@ CIRCUIT_EXPORT void gaussian(size_t const n, rat_t *restrict *restrict A, rat_t 
 				A[m][j] = A_temp;
 			}
 		}
-		// Forward elimination
+		/// Forward elimination
 		for( size_t i = k+1; i < n; i++ ) {
 			rat_t const factor = rat_div(A[i][k], A[k][k]);
 			for( size_t j = k+1; j < n; j++ ) {
@@ -71,7 +70,7 @@ CIRCUIT_EXPORT void gaussian(size_t const n, rat_t *restrict *restrict A, rat_t 
 			v[i] = rat_sub(v[i], rat_mul(factor, v[k]));
 		}
 	}
-	// Back substitution
+	/// Back substitution
 	for( size_t i = n-1; i < n; i-- ) {
 		v[i] = v[i];
 		for( size_t j = i+1; j < n; j++ ) {
@@ -178,65 +177,93 @@ CIRCUIT_EXPORT NO_NULLS void circuit_calc_voltages(struct Circuit *const c) {
 		c->voltage[i] = rat_zero();
 		c->current[i] = rat_zero();
 	}
-	rat_t const eps = rat_epsilon();
-	for( size_t i=0; i < MAX_NODES; i++ ) {
-		for( struct Comp *comp = c->comps[i]; comp != NULL; comp = comp->next ) {
-			size_t const j = comp->node;
+	
+	uint8_t node_to_matrix_idx[MAX_NODES] = {0};
+	uint8_t matrix_idx_to_node[MAX_NODES] = {0};
+	size_t n = 0;
+	for( uint8_t i=0; i < MAX_NODES; i++ ) {
+		if( (c->active_nodes & (1 << i)) && i != GROUND_INDEX ) {
+			node_to_matrix_idx[i] = n;
+			matrix_idx_to_node[n] = i;
+			n++;
+		}
+	}
+	
+	rat_t **G = bistack_alloc_front(&c->bistack, n * sizeof *G);
+	for( size_t i=0; i < n; i++ ) {
+		G[i] = bistack_alloc_front(&c->bistack, n * sizeof **G);
+		for( size_t j=0; j < n; j++ ) {
+			G[i][j] = rat_zero();
+		}
+	}
+	
+	rat_t *I = bistack_alloc_front(&c->bistack, n * sizeof *I);
+	for( size_t i=0; i < n; i++ ) {
+		I[i] = rat_zero();
+	}
+	
+	for( size_t idx=0; idx < n; idx++ ) {
+		uint8_t const node_i = matrix_idx_to_node[idx];
+		for( struct Comp *comp = c->comps[node_i]; comp != NULL; comp = comp->next ) {
+			uint8_t const node_j = comp->node;
+			int const idx_j = ( node_j != GROUND_INDEX )? node_to_matrix_idx[node_j] : -1;
 			switch( comp->kind ) {
-				case DEVICE_VOLTAGE_SRC: {
-					c->voltage[j] = comp->val;
-					break;
-				}
-				case DEVICE_CAPACITOR: {
-					/// 
+				case DEVICE_RESISTOR: {
+					// Conductance G = 1/R
+					rat_t const G_ij = rat_recip(comp->val);
+					// Diagonal element
+					G[idx][idx] = rat_add(G[idx][idx], G_ij);
+					// Off-diagonal elements
+					if( idx_j != -1 ) {
+						G[idx][idx_j] = rat_sub(G[idx][idx_j], G_ij);
+						// Since G is symmetric
+						G[idx_j][idx] = rat_sub(G[idx_j][idx], G_ij);
+						G[idx_j][idx_j] = rat_add(G[idx_j][idx_j], G_ij);
+					}
 					break;
 				}
 				case DEVICE_DC_CURRENT_SRC: {
-					/// 
+					// Current source from node_i to node_j
+					rat_t I_s = comp->val;
+					// Current leaving node_i
+					I[idx] = rat_sub(I[idx], I_s);
+					// Current entering node_j
+					if( idx_j != -1 ) {
+						I[idx_j] = rat_add(I[idx_j], I_s);
+					}
 					break;
 				}
-				/*
-				case DEVICE_AC_CURRENT_SRC: {
-					/// 
-					break;
-				}
-				*/
-				/*
-				case DEVICE_DIODE: {
-					/// 
-					break;
-				}
-				*/
-				case DEVICE_INDUCTOR: {
-					/// V = L[dI/dt]
-					/// V = L[(I_f - I_i) / (t_f - t_i)]
-					break;
-				}
-				case DEVICE_RESISTOR: {
-					/**
-					 * V = IR
-					 * (V_n1 - V_n2) / R = I
-					 * V_n2 = V_n1 - IR
-					 */
-					// If the voltage at one node is known, calculate the current
-					if( !rat_eq(c->voltage[i], rat_zero(), eps) && !rat_eq(c->voltage[j], rat_zero(), eps) ) {
-						// If both node voltages are known, calculate the current
-						rat_t voltage_diff = rat_sub(c->voltage[i], c->voltage[j]);
-						rat_t current = rat_div(voltage_diff, comp->val);
-						c->current[i] = rat_add(c->current[i], current);
-						c->current[j] = rat_sub(c->current[j], current);
-					} else if (!rat_eq(c->voltage[i], rat_zero(), eps)) {
-						// If voltage at node i is known, calculate voltage at node j
-						c->voltage[j] = rat_sub(c->voltage[i], rat_mul(c->current[i], comp->val));
-					} else if (!rat_eq(c->voltage[j], rat_zero(), eps)) {
-						// If voltage at node j is known, calculate voltage at node i
-						c->voltage[i] = rat_add(c->voltage[j], rat_mul(c->current[j], comp->val));
+				case DEVICE_VOLTAGE_SRC: {
+					// Voltage source handling (connected to ground)
+					if( node_j==GROUND_INDEX ) {
+						c->voltage[node_i] = comp->val;
+						// Modify G and I to reflect known voltage
+						for( size_t k=0; k < n; k++ ) {
+							G[idx][k] = rat_zero();
+							G[k][idx] = rat_zero();
+						}
+						G[idx][idx] = rat_pos1();
+						I[idx] = comp->val;
+					} else {
+						// Voltage source between two non-ground nodes
+						// Requires Modified Nodal Analysis
+						// Not implemented here
 					}
 					break;
 				}
 			}
 		}
 	}
+	
+	rat_t *const v = I; // The RHS vector
+	gaussian(n, G, v);
+	for( size_t idx = 0; idx < n; idx++ ) {
+		c->voltage[ matrix_idx_to_node[idx] ] = v[idx];
+	}
+	
+	// Set ground node voltage
+	c->voltage[GROUND_INDEX] = rat_zero();
+	bistack_reset_front(&c->bistack);
 }
 
 #endif
