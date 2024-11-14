@@ -6,7 +6,7 @@
 
 #define RATIONAL_EXPORT    static inline
 
-#	ifdef __CE__
+#	ifdef TICE_H
 #include <ti/real.h>
 typedef real_t rat_t;
 
@@ -31,9 +31,6 @@ RATIONAL_EXPORT rat_t rat_int(rat_t const a) {
 }
 RATIONAL_EXPORT rat_t rat_neg(rat_t const a) {
 	return os_RealNeg(&a);
-}
-RATIONAL_EXPORT rat_t rat_abs(rat_t const a) {
-	return rat_lt(a, rat_zero) > 0? rat_neg(a) : a;
 }
 RATIONAL_EXPORT rat_t rat_ln(rat_t const a) {
 	return os_RealLog(&a);
@@ -65,15 +62,14 @@ RATIONAL_EXPORT rat_t rat_tan(rat_t const a) {
 RATIONAL_EXPORT rat_t rat_asin(rat_t const a) {
 	return os_RealAsinRad(&a);
 }
-RATIONAL_EXPORT rat_t rat_cos(rat_t const a) {
+RATIONAL_EXPORT rat_t rat_acos(rat_t const a) {
 	return os_RealAcosRad(&a);
 }
-RATIONAL_EXPORT rat_t rat_tan(rat_t const a) {
+RATIONAL_EXPORT rat_t rat_atan(rat_t const a) {
 	return os_RealAtanRad(&a);
 }
 RATIONAL_EXPORT rat_t rat_pi(void) {
-	rat_t const n1 = rat_neg1();
-	return os_RealAcosRad(&n1);
+	return rat_acos(rat_neg1());
 }
 
 /** Binary Operations */
@@ -109,10 +105,13 @@ RATIONAL_EXPORT int rat_cmp(rat_t const a, rat_t const b) {
 	return os_RealCompare(&a, &b);
 }
 RATIONAL_EXPORT rat_t rat_log_base(rat_t const a, rat_t const b) {
-	return rat_ln(a) / rat_ln(b);
+	return rat_div(rat_ln(a), rat_ln(b));
 }
 RATIONAL_EXPORT int rat_lt(rat_t const a, rat_t const b) {
 	return rat_cmp(a, b) < 0;
+}
+RATIONAL_EXPORT rat_t rat_abs(rat_t const a) {
+	return rat_lt(a, rat_zero())? rat_neg(a) : a;
 }
 RATIONAL_EXPORT int rat_ge(rat_t const a, rat_t const b) {
 	return rat_cmp(a, b) >= 0;
@@ -133,7 +132,7 @@ RATIONAL_EXPORT rat_t rat_clamp(rat_t const val, rat_t const min, rat_t const ma
 	return rat_max(min, rat_min(val, max));
 }
 RATIONAL_EXPORT int rat_eq(rat_t const a, rat_t const b, rat_t const eps) {
-	return rat_abs(rat_sub(a, b)) < eps;
+	return rat_lt(rat_abs(rat_sub(a, b)), eps);
 }
 
 RATIONAL_EXPORT int rat_to_str(rat_t const a, size_t const len, char buffer[const static len]) {
@@ -142,7 +141,7 @@ RATIONAL_EXPORT int rat_to_str(rat_t const a, size_t const len, char buffer[cons
 
 RATIONAL_EXPORT rat_t str_to_rat(char const cstr[const static 1]) {
 	char *end = NULL;
-	return StrToReal(cstr, &end);
+	return os_StrToReal(cstr, &end);
 }
 #	else
 #include <math.h>
@@ -179,7 +178,7 @@ RATIONAL_EXPORT rat_t rat_exp(rat_t const a) {
 	return exp(a);
 }
 RATIONAL_EXPORT rat_t rat_recip(rat_t const a) {
-	return 1 / a;
+	return 1.0 / a;
 }
 RATIONAL_EXPORT rat_t rat_floor(rat_t const a) {
 	return floor(a);

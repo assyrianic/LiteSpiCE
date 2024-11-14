@@ -1,8 +1,6 @@
-#include <ti/screen.h>
-#include <ti/getcsc.h>
+#include <tice.h>
 #include <stdlib.h>
 #include "node.h"
-
 
 /**
 0 -> Ground/Reference node.
@@ -29,34 +27,57 @@ V2 -> [6][4]
  */
 
 
-enum{ MEM_SIZE = 1 << 15 };
+enum{ MEM_SIZE = 1 << 12 };
 uint8_t backing_mem[MEM_SIZE];
 
 int main(void) {
+#	ifdef TICE_H
+#	warning "compiling for TI Calculator"
+	os_ClrHome();
+	puts("Welcome to LiteSpiCE");
 	struct Circuit circuit = circuit_make(backing_mem, sizeof backing_mem);
-	
-	circuit_add_component(&circuit, 0, 1, DEVICE_VOLTAGE_SRC, rat_from_int(5)); // V1 between node 0 and 1
-	circuit_add_component(&circuit, 1, 2, DEVICE_RESISTOR, rat_from_int(1000)); // R1 between node 1 and 2
-	circuit_add_component(&circuit, 2, 0, DEVICE_RESISTOR, rat_from_int(1000)); // R2 between node 2 and 0
-	
+	if( circuit_add_component(&circuit, 0, 1, DEVICE_VOLTAGE_SRC, rat_from_int(5))==ERR_OK ) {  // V1 between node 0 and 1
+		puts("Voltage Src (5 volts) | ground -> node 1.");
+	}
+	if( circuit_add_component(&circuit, 1, 2, DEVICE_RESISTOR, rat_from_int(1000)) ) { // R1 between node 1 and 2
+		puts("Resistor (1K ohm) | node 1 -> node 2.");
+	}
+	if( circuit_add_component(&circuit, 2, 0, DEVICE_RESISTOR, rat_from_int(2000)) ) { // R2 between node 2 and 0
+		puts("Resistor (2K ohm) | node 2 -> ground.");
+	}
+	puts("Calcing voltages...");
 	circuit_calc_voltages(&circuit);
+	while( os_GetCSC() != sk_Enter );
+	os_ClrHome();
+	puts("Done calculating voltages...\n\nPrinting Voltages::");
 	for( size_t i=0; i < MAX_NODES; i++ ) {
 		if( circuit.active_nodes & (1 << i) ) {
-			char buffer[32] = {0};
-			rat_to_str(circuit.voltage[i], sizeof buffer, buffer);
-			printf("Voltage at node %zu: %s V\n", i, buffer);
+			char voltage_str[32] = {0}; rat_to_str(circuit.voltage[i], sizeof voltage_str, voltage_str);
+			printf("Node_%zu: %s volts\n", i, voltage_str);
 		}
 	}
-	
-#	ifdef __CE__
-	os_ClrHome();                    /** Clear the homescreen */
-	os_PutStrFull("Hello World");    /** Print a string  */
-	for(;;) {
-		if( os_GetCSC()==sk_Clear ) {
-			break;
-		}
-	}
+	while( os_GetCSC() != sk_Clear );
 #	else
-	printf("Hello World");
+#	warning "compiling for PC/Other"
+	puts("Welcome to LiteSpiCE");
+	struct Circuit circuit = circuit_make(backing_mem, sizeof backing_mem);
+	if( circuit_add_component(&circuit, 0, 1, DEVICE_VOLTAGE_SRC, rat_from_int(5))==ERR_OK ) {  // V1 between node 0 and 1
+		puts("Voltage Src (5 volts) | ground -> node 1.");
+	}
+	if( circuit_add_component(&circuit, 1, 2, DEVICE_RESISTOR, rat_from_int(1000)) ) { // R1 between node 1 and 2
+		puts("Resistor (1K ohm) | node 1 -> node 2.");
+	}
+	if( circuit_add_component(&circuit, 2, 0, DEVICE_RESISTOR, rat_from_int(2000)) ) { // R2 between node 2 and 0
+		puts("Resistor (2K ohm) | node 2 -> ground.");
+	}
+	puts("Calcing voltages...");
+	circuit_calc_voltages(&circuit);
+	puts("Done calculating voltages...\n\nPrinting Voltages::");
+	for( size_t i=0; i < MAX_NODES; i++ ) {
+		if( circuit.active_nodes & (1 << i) ) {
+			char voltage_str[32] = {0}; rat_to_str(circuit.voltage[i], sizeof voltage_str, voltage_str);
+			printf("Node_%zu: %s volts\n", i, voltage_str);
+		}
+	}
 #	endif
 }
