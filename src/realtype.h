@@ -136,7 +136,7 @@ RATIONAL_EXPORT int rat_eq(rat_t const a, rat_t const b, rat_t const eps) {
 }
 
 RATIONAL_EXPORT int rat_to_str(rat_t const a, size_t const len, char buffer[const static len]) {
-	return os_RealToStr(buffer, &a, len, 4, -1) > 0;
+	return os_RealToStr(buffer, &a, len, 0, -1) > 0;
 }
 
 RATIONAL_EXPORT rat_t str_to_rat(char const cstr[const static 1]) {

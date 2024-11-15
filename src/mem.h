@@ -66,8 +66,8 @@ TI_MEM_EXPORT NO_NULLS void *region_alloc_reset_when_full(struct TIMemRegion *co
 	return memset(r->mem + alloc_offs, 0, bytes);
 }
 
-TI_MEM_EXPORT NO_NULLS ptrdiff_t region_size_remaining(struct TIMemRegion const *const r) {
-	return ( ptrdiff_t )(r->len - r->offs);
+TI_MEM_EXPORT NO_NULLS int region_size_remaining(struct TIMemRegion const *const r) {
+	return ( int )(r->len - r->offs);
 }
 
 
@@ -79,7 +79,7 @@ struct TIBiStack {
 
 
 TI_MEM_EXPORT NO_NULLS struct TIBiStack bistack_make(uint8_t *const buf, size_t const len) {
-	return (struct TIBiStack){ .mem = buf, .len = len, .front = 0, .back = 0 };
+	return (struct TIBiStack){ .mem = buf, .len = len, .front = 0, .back = len };
 }
 
 TI_MEM_EXPORT NO_NULLS void bistack_reset(struct TIBiStack *s) {
@@ -104,6 +104,16 @@ TI_MEM_EXPORT NO_NULLS void *bistack_alloc_front(struct TIBiStack *const s, size
 	return memset(s->mem + alloc_offs, 0, bytes);
 }
 
+TI_MEM_EXPORT NO_NULLS void *bistack_alloc_front_vec(struct TIBiStack *const s, size_t len, size_t elem_size) {
+	size_t const bytes = _align_size(len * elem_size, sizeof len);
+	if( s->front + bytes >= s->back ) {
+		return NULL;
+	}
+	size_t const alloc_offs = s->front;
+	s->front += bytes;
+	return memset(s->mem + alloc_offs, 0, bytes);
+}
+
 TI_MEM_EXPORT NO_NULLS void *bistack_alloc_back(struct TIBiStack *const s, size_t bytes) {
 	bytes = _align_size(bytes, sizeof bytes);
 	if( s->back - bytes <= s->front ) {
@@ -113,7 +123,16 @@ TI_MEM_EXPORT NO_NULLS void *bistack_alloc_back(struct TIBiStack *const s, size_
 	return memset(s->mem + s->back, 0, bytes);
 }
 
-TI_MEM_EXPORT NO_NULLS ptrdiff_t bistack_get_margins(struct TIBiStack const *s) {
+TI_MEM_EXPORT NO_NULLS void *bistack_alloc_back_vec(struct TIBiStack *const s, size_t len, size_t elem_size) {
+	size_t const bytes = _align_size(len * elem_size, sizeof len);
+	if( s->back - bytes <= s->front ) {
+		return NULL;
+	}
+	s->back -= bytes;
+	return memset(s->mem + s->back, 0, bytes);
+}
+
+TI_MEM_EXPORT NO_NULLS int bistack_get_margins(struct TIBiStack const *s) {
 	return s->back - s->front;
 }
 
